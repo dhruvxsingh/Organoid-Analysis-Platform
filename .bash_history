@@ -65,3 +65,6 @@ git add .
 git commit -m "changed app.py"
 git push
 touch Readme.md
+git add .
+git commit -m "added readme"
+git push

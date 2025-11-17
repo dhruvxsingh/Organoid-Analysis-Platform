@@ -13,3 +13,4 @@ cellpose
 torch
 torchvision
 scikit-image
+einops  
