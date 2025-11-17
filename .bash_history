@@ -71,3 +71,6 @@ git push
 git add .
 git commit -m "updated requirements"
 git push
+git add .
+git commit -m "added footer"
+git push

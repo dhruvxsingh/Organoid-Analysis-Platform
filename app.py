@@ -599,34 +599,3 @@ with workflow_tab2:
                 )
         else:
             st.info("No results yet. Please run analysis first.")
-
-hide_streamlit_style = """
-<style>
-#MainMenu {visibility: hidden;}
-footer {visibility: hidden;}
-.stDeployButton {display:none;}
-</style>
-"""
-st.markdown(hide_streamlit_style, unsafe_allow_html=True)
-
-# Optional: Add your own footer
-custom_footer = """
-<style>
-.custom-footer {
-    position: fixed;
-    left: 0;
-    bottom: 0;
-    width: 100%;
-    background-color: white;
-    color: #6B7280;
-    text-align: center;
-    padding: 8px 0;
-    border-top: 1px solid #E5E7EB;
-    font-size: 14px;
-}
-</style>
-<div class="custom-footer">
-    <p>Organoid Analysis Platform v1.0 | © 2024</p>
-</div>
-"""
-st.markdown(custom_footer, unsafe_allow_html=True)
