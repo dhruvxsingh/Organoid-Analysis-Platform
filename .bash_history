@@ -68,3 +68,6 @@ touch Readme.md
 git add .
 git commit -m "added readme"
 git push
+git add .
+git commit -m "updated requirements"
+git push
