@@ -147,7 +147,6 @@ with workflow_tab1:
         progress_bar = st.progress(progress)
         st.metric("Total Images Uploaded", sum(upload_status.values()))
         
-        # Analysis button
         all_days_have_images = all(len(files) > 0 for files in st.session_state.uploaded_files.values())
         
         if st.button("🚀 Run DILITracer Analysis", disabled=not all_days_have_images, type="primary"):

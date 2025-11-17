@@ -54,3 +54,10 @@ echo "__pycache__/" >> .gitignore
 echo "*.pyc" >> .gitignore
 echo ".env" >> .gitignore
 git init
+git add .
+git commit -m "Initial commit"
+git remote add origin https://github.com/dhruvxsingh/Organoid-Analysis-Platform.git
+git branch -M main
+git push -u origin main
+git status
+git status
