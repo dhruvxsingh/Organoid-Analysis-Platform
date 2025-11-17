@@ -74,3 +74,6 @@ git push
 git add .
 git commit -m "added footer"
 git push
+git add .
+git commit -m "changed footer"
+git push

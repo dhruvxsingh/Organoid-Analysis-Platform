@@ -13,6 +13,16 @@ import numpy as np
 from streamlit_lottie import st_lottie
 from dilitracer_integration import DILITracerAnalyzer
 
+hide_streamlit_style = """
+<style>
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+.stDeployButton {display:none;}
+header {visibility: hidden;}
+</style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
 # Page config
 st.set_page_config(
     page_title="Organoid Analysis Platform",
