@@ -61,3 +61,7 @@ git branch -M main
 git push -u origin main
 git status
 git status
+git add .
+git commit -m "changed app.py"
+git push
+touch Readme.md
