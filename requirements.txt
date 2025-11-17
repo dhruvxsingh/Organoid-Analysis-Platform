@@ -1,0 +1,15 @@
+streamlit
+plotly
+pandas
+numpy
+scipy
+Pillow
+matplotlib
+reportlab
+streamlit-lottie
+requests
+opencv-python-headless
+cellpose
+torch
+torchvision
+scikit-image
