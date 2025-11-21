@@ -85,236 +85,312 @@ st.markdown("---")
 workflow_tab1, workflow_tab2 = st.tabs(["🧬 DILITracer (Toxicity Analysis)", "🔬 Morphology Analysis"])
 
 with workflow_tab1:
-    # Load animation
-    lottie_dna = load_lottieurl("https://assets5.lottiefiles.com/packages/lf20_fcfjwiyb.json")
-    if lottie_dna:
-        st_lottie(lottie_dna, height=200, key="dna")
+    # Remove balloon animation, keep it clean
+    st.markdown("## 🧬 Multi-Drug DILITracer Analysis")
+    st.info("Compare hepatotoxicity across multiple drug candidates simultaneously")
 
-    # Initialize session state
-    if 'uploaded_files' not in st.session_state:
-        st.session_state.uploaded_files = {'D00': [], 'D01': [], 'D02': [], 'D03': []}
-    if 'analysis_results' not in st.session_state:
-        st.session_state.analysis_results = None
+    # Initialize session state for multiple conditions
+    if 'multi_uploaded_files' not in st.session_state:
+        st.session_state.multi_uploaded_files = {
+            'Control': {'D00': [], 'D01': [], 'D02': [], 'D03': []},
+            'Drug A': {'D00': [], 'D01': [], 'D02': [], 'D03': []},
+            'Drug B': {'D00': [], 'D01': [], 'D02': [], 'D03': []},
+            'Drug C': {'D00': [], 'D01': [], 'D02': [], 'D03': []}
+        }
+    if 'multi_analysis_results' not in st.session_state:
+        st.session_state.multi_analysis_results = {}
     if 'analyzer' not in st.session_state:
         st.session_state.analyzer = None
 
-    # Instructions in an expander
-    with st.expander("📋 How to Use This Platform", expanded=False):
+    # Instructions
+    with st.expander("📋 How to Use Multi-Drug Analysis", expanded=False):
         st.markdown("""
-        1. **Upload Images**: Upload TIFF images for each time point (Day 0 to Day 3)
-        2. **Verify**: Ensure each day has at least 1 image (typically 3-10 z-stack images)
-        3. **Analyze**: Click 'Run DILITracer Analysis' to predict hepatotoxicity
-        4. **Review**: Examine the AI predictions and risk assessment
+        1. **Upload Images**: For each condition (Control, Drug A/B/C), upload 4-day image series
+        2. **Flexible Analysis**: Upload only the conditions you want to compare
+        3. **Run Analysis**: DILITracer will analyze each uploaded condition
+        4. **Compare Results**: View side-by-side toxicity predictions
+        5. **Generate Report**: Download comprehensive comparison report
         """)
 
-    # Create tabs for better organization
-    tab1, tab2 = st.tabs(["📤 Upload Images", "📊 Analysis Results"])
+    # Create tabs
+    tab1, tab2 = st.tabs(["📤 Upload Images", "📊 Comparison Results"])
 
     with tab1:
-        st.markdown("### Upload Organoid Images")
+        st.markdown("### 📁 Upload Images for Each Condition")
         
-        # Progress indicator
-        progress_cols = st.columns(4)
+        # Quick load demo button
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            if st.button("🎯 Load Demo Images (Quick Test)", type="secondary"):
+                # This will load pre-selected images
+                st.info("Demo feature: Would load pre-selected images with expected results:\n"
+                       "• Control → No-DILI\n"
+                       "• Drug A → Less-DILI\n" 
+                       "• Drug B → No-DILI\n"
+                       "• Drug C → Most-DILI")
+                # TODO: Implement actual demo loading
+        
+        st.markdown("---")
+        
+        # Create upload sections for each condition
+        conditions = ['Control', 'Drug A', 'Drug B', 'Drug C']
+        condition_colors = {
+            'Control': '#10B981',  # Green
+            'Drug A': '#3B82F6',   # Blue
+            'Drug B': '#8B5CF6',   # Purple
+            'Drug C': '#EF4444'    # Red
+        }
+        
         upload_status = {}
         
-        # Create columns for each day with better styling
-        cols = st.columns(4)
-        
-        for idx, (day, col) in enumerate(zip(['D00', 'D01', 'D02', 'D03'], cols)):
-            with col:
-                st.markdown(f"""
-                <div style='text-align: center; padding: 1rem; background: #F3F4F6; border-radius: 10px;'>
-                    <h4>Day {idx}</h4>
-                </div>
-                """, unsafe_allow_html=True)
+        for condition in conditions:
+            with st.expander(f"**{condition}** - Upload 4-day Image Series", expanded=True):
+                # Create 4 columns for each day
+                cols = st.columns(4)
+                condition_status = {}
                 
-                files = st.file_uploader(
-                    f"Select images",
-                    type=['tiff', 'tif'],
-                    accept_multiple_files=True,
-                    key=f"upload_{day.lower()}"
-                )
+                for idx, (day, col) in enumerate(zip(['D00', 'D01', 'D02', 'D03'], cols)):
+                    with col:
+                        st.markdown(f"""
+                        <div style='text-align: center; padding: 0.5rem; 
+                                    background: {condition_colors[condition]}20; 
+                                    border-radius: 8px; margin-bottom: 0.5rem;'>
+                            <b>Day {idx}</b>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        files = st.file_uploader(
+                            f"Upload",
+                            type=['tiff', 'tif'],
+                            accept_multiple_files=True,
+                            key=f"upload_{condition}_{day}".replace(" ", "_"),
+                            label_visibility="collapsed"
+                        )
+                        
+                        if files:
+                            st.session_state.multi_uploaded_files[condition][day] = files
+                            condition_status[day] = len(files)
+                            st.success(f"✅ {len(files)}")
+                        else:
+                            condition_status[day] = 0
+                            st.caption("No images")
                 
-                if files:
-                    st.session_state.uploaded_files[day] = files
-                    upload_status[day] = len(files)
-                    st.success(f"✅ {len(files)} images")
-                    
-                    # Show preview of first image
-                    if st.checkbox(f"Preview", key=f"preview_{day}"):
-                        image = Image.open(files[0])
-                        st.image(image, caption=files[0].name, use_column_width=True)
+                # Check if this condition has all days uploaded
+                all_days = all(condition_status.get(f'D0{i}', 0) > 0 for i in range(4))
+                upload_status[condition] = {
+                    'complete': all_days,
+                    'total_images': sum(condition_status.values())
+                }
+                
+                if all_days:
+                    st.success(f"✅ {condition} ready for analysis ({upload_status[condition]['total_images']} images)")
+                elif upload_status[condition]['total_images'] > 0:
+                    st.warning(f"⚠️ {condition} incomplete - some days missing")
                 else:
-                    upload_status[day] = 0
-                    st.info("No images yet")
+                    st.info(f"No images uploaded for {condition}")
         
-        # Upload summary with progress bar
+        # Summary and run button
         st.markdown("---")
-        total_days_uploaded = sum(1 for v in upload_status.values() if v > 0)
-        progress = total_days_uploaded / 4
+        st.markdown("### 📊 Upload Summary")
         
-        st.markdown("### 📊 Upload Progress")
-        progress_bar = st.progress(progress)
-        st.metric("Total Images Uploaded", sum(upload_status.values()))
+        # Show which conditions are ready
+        ready_conditions = [c for c, status in upload_status.items() if status['complete']]
+        partial_conditions = [c for c, status in upload_status.items() 
+                            if status['total_images'] > 0 and not status['complete']]
         
-        all_days_have_images = all(len(files) > 0 for files in st.session_state.uploaded_files.values())
+        col1, col2 = st.columns(2)
+        with col1:
+            if ready_conditions:
+                st.success(f"**Ready for analysis:** {', '.join(ready_conditions)}")
+            else:
+                st.warning("No conditions ready for analysis")
         
-        if st.button("🚀 Run DILITracer Analysis", disabled=not all_days_have_images, type="primary"):
-            if all_days_have_images:
+        with col2:
+            if partial_conditions:
+                st.warning(f"**Incomplete:** {', '.join(partial_conditions)}")
+        
+        # Run analysis button
+        if ready_conditions:
+            if st.button(f"🚀 Run DILITracer Analysis on {len(ready_conditions)} Condition(s)", 
+                        type="primary", use_container_width=True):
+                
                 with st.spinner("🧬 Initializing DILITracer model..."):
                     if st.session_state.analyzer is None:
                         st.session_state.analyzer = DILITracerAnalyzer()
-                    time.sleep(1)
                 
-                with st.spinner("🔬 Analyzing organoid morphology changes..."):
-                    progress_bar = st.progress(0)
-                    for i in range(100):
-                        time.sleep(0.02)
-                        progress_bar.progress(i + 1)
+                # Clear previous results
+                st.session_state.multi_analysis_results = {}
+                
+                # Analyze each ready condition
+                progress_bar = st.progress(0)
+                status_text = st.empty()
+                
+                for idx, condition in enumerate(ready_conditions):
+                    status_text.text(f"Analyzing {condition}...")
                     
-                    # Run actual analysis
-                    results = st.session_state.analyzer.run_analysis(st.session_state.uploaded_files)
-                    st.session_state.analysis_results = results
+                    # Get files for this condition
+                    condition_files = st.session_state.multi_uploaded_files[condition]
+                    
+                    # Run analysis
+                    results = st.session_state.analyzer.run_analysis(condition_files)
+                    st.session_state.multi_analysis_results[condition] = results
+                    
+                    progress_bar.progress((idx + 1) / len(ready_conditions))
                 
-                st.success("✅ Analysis Complete!")
-                st.balloons()
-                st.info("Go to 'Analysis Results' tab to view the predictions")
+                status_text.text("✅ Analysis complete!")
+                st.success(f"Successfully analyzed {len(ready_conditions)} conditions!")
+                st.info("Go to 'Comparison Results' tab to view the analysis")
+        else:
+            st.warning("Please upload complete 4-day series for at least one condition")
 
     with tab2:
-        if st.session_state.analysis_results:
-            results = st.session_state.analysis_results
+        if st.session_state.multi_analysis_results:
+            results = st.session_state.multi_analysis_results
             
-            # Create visually appealing results display
-            st.markdown("## 🎯 DILITracer Prediction Results")
+            st.markdown("## 🎯 DILITracer Comparison Results")
+            st.markdown(f"**Analyzed Conditions:** {', '.join(results.keys())}")
             
-            # Main prediction display
-            col1, col2, col3 = st.columns([1, 2, 1])
+            # Summary cards showing all conditions
+            st.markdown("### 📊 Toxicity Summary")
             
-            with col2:
-                # Color code based on risk
-                risk_colors = {
-                    "No-DILI": "#10B981",  # Green
-                    "Less-DILI": "#F59E0B",  # Orange
-                    "Most-DILI": "#EF4444"  # Red
-                }
-                
-                color = risk_colors.get(results['prediction'], "#6B7280")
-                
-                st.markdown(f"""
-                <div style='padding: 2rem; border-radius: 15px; background: {color}; color: white; text-align: center;'>
-                    <h2 style='margin: 0;'>Predicted Classification</h2>
-                    <h1 style='font-size: 3rem; margin: 0.5rem 0;'>{results['prediction']}</h1>
-                    <h3 style='margin: 0;'>{results['risk_level']}</h3>
-                </div>
-                """, unsafe_allow_html=True)
+            cols = st.columns(len(results))
+            
+            for col, (condition, result) in zip(cols, results.items()):
+                with col:
+                    # Color based on prediction
+                    color = {
+                        "No-DILI": "#10B981",
+                        "Less-DILI": "#F59E0B", 
+                        "Most-DILI": "#EF4444"
+                    }.get(result['prediction'], "#6B7280")
+                    
+                    # Create result card
+                    st.markdown(f"""
+                    <div style='padding: 1.5rem; border-radius: 10px; 
+                               background: {color}; color: white; text-align: center;'>
+                        <h3 style='margin: 0;'>{condition}</h3>
+                        <h2 style='margin: 0.5rem 0;'>{result['prediction']}</h2>
+                        <p style='margin: 0;'>{result['risk_level']}</p>
+                        <p style='margin: 0.5rem 0; font-size: 0.9rem;'>
+                            Confidence: {result['confidence']*100:.1f}%
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # Recommendation icon
+                    if result['prediction'] == "Most-DILI":
+                        st.error("❌ ELIMINATE - High toxicity")
+                    elif result['prediction'] == "Less-DILI":
+                        st.warning("⚠️ CAUTION - Moderate toxicity")
+                    else:
+                        st.success("✅ SAFE - Low toxicity")
             
             st.markdown("---")
             
-            # Probability visualization
-            col1, col2 = st.columns(2)
+            # Detailed comparison table
+            st.markdown("### 📈 Detailed Probability Comparison")
             
-            with col1:
-                # Create gauge chart
-                fig = go.Figure(go.Indicator(
-                    mode = "gauge+number",
-                    value = results['confidence'] * 100 if results['confidence'] > 0 else abs(results['confidence']) * 100,
-                    domain = {'x': [0, 1], 'y': [0, 1]},
-                    title = {'text': "Confidence Score (%)"},
-                    gauge = {
-                        'axis': {'range': [None, 100]},
-                        'bar': {'color': color},
-                        'steps': [
-                            {'range': [0, 33], 'color': "lightgray"},
-                            {'range': [33, 66], 'color': "gray"},
-                            {'range': [66, 100], 'color': "darkgray"}
-                        ],
-                        'threshold': {
-                            'line': {'color': "red", 'width': 4},
-                            'thickness': 0.75,
-                            'value': 90
-                        }
-                    }
-                ))
-                fig.update_layout(height=300)
-                st.plotly_chart(fig, use_container_width=True)
+            # Create comparison dataframe
+            comparison_data = []
+            for condition, result in results.items():
+                comparison_data.append({
+                    'Condition': condition,
+                    'Prediction': result['prediction'],
+                    'No-DILI (%)': f"{result['probabilities']['No-DILI']*100:.2f}",
+                    'Less-DILI (%)': f"{result['probabilities']['Less-DILI']*100:.2f}",
+                    'Most-DILI (%)': f"{result['probabilities']['Most-DILI']*100:.2f}",
+                    'Risk Level': result['risk_level']
+                })
             
-            with col2:
-                # Probability bar chart
-                prob_data = {
-                    'Category': ['No-DILI', 'Less-DILI', 'Most-DILI'],
-                    'Probability': [
-                        results['probabilities']['No-DILI'],
-                        results['probabilities']['Less-DILI'],
-                        results['probabilities']['Most-DILI']
-                    ]
-                }
-                
-                fig = px.bar(
-                    prob_data, 
-                    x='Category', 
-                    y='Probability',
-                    title="Classification Probabilities",
-                    color='Category',
-                    color_discrete_map={
-                        'No-DILI': '#10B981',
-                        'Less-DILI': '#F59E0B',
-                        'Most-DILI': '#EF4444'
-                    }
-                )
-                fig.update_layout(height=300, showlegend=False)
-                st.plotly_chart(fig, use_container_width=True)
+            df_comparison = pd.DataFrame(comparison_data)
             
-            # Interpretation section
-            st.markdown("### 📝 Clinical Interpretation")
+            # Style the dataframe
+            def style_prediction(val):
+                if val == "Most-DILI":
+                    return 'background-color: #FEE2E2'
+                elif val == "Less-DILI":
+                    return 'background-color: #FEF3C7'
+                else:
+                    return 'background-color: #D1FAE5'
             
-            interpretations = {
-                "No-DILI": {
-                    "icon": "✅",
-                    "text": "The compound shows **no significant hepatotoxic effects**. The organoids maintained healthy morphology throughout the treatment period.",
-                    "recommendation": "Safe to proceed with further testing"
-                },
-                "Less-DILI": {
-                    "icon": "⚠️",
-                    "text": "The compound shows **moderate hepatotoxic effects**. Some morphological changes observed but organoids remain viable.",
-                    "recommendation": "Proceed with caution, consider dose adjustment"
-                },
-                "Most-DILI": {
-                    "icon": "🚫",
-                    "text": "The compound shows **severe hepatotoxic effects**. Significant organoid damage and cell death observed.",
-                    "recommendation": "High risk - reconsider compound or significantly modify"
-                }
+            styled_df = df_comparison.style.applymap(style_prediction, subset=['Prediction'])
+            st.dataframe(styled_df, use_container_width=True)
+            
+            # Visualization - Grouped bar chart
+            st.markdown("### 📊 Probability Distribution Comparison")
+            
+            # Prepare data for plotting
+            categories = ['No-DILI', 'Less-DILI', 'Most-DILI']
+            fig = go.Figure()
+            
+            colors_map = {
+                'Control': '#10B981',
+                'Drug A': '#3B82F6',
+                'Drug B': '#8B5CF6',
+                'Drug C': '#EF4444'
             }
             
-            interp = interpretations[results['prediction']]
-            st.info(f"{interp['icon']} {interp['text']}")
-            st.warning(f"**Recommendation**: {interp['recommendation']}")
+            for condition, result in results.items():
+                fig.add_trace(go.Bar(
+                    name=condition,
+                    x=categories,
+                    y=[result['probabilities'][cat] for cat in categories],
+                    marker_color=colors_map.get(condition, '#6B7280')
+                ))
             
-            # Download report button
+            fig.update_layout(
+                barmode='group',
+                title="Toxicity Probability Comparison",
+                xaxis_title="DILI Category",
+                yaxis_title="Probability",
+                height=400,
+                showlegend=True
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Drug selection recommendation
+            st.markdown("---")
+            st.markdown("### 🎯 Drug Selection Recommendation")
+            
+            # Sort by safety (No-DILI probability)
+            sorted_conditions = sorted(results.items(), 
+                                     key=lambda x: x[1]['probabilities']['No-DILI'], 
+                                     reverse=True)
+            
+            st.markdown("**Ranking by Safety (No-DILI Probability):**")
+            for rank, (condition, result) in enumerate(sorted_conditions, 1):
+                emoji = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else "📊"
+                st.markdown(f"{emoji} **{rank}. {condition}** - "
+                          f"No-DILI: {result['probabilities']['No-DILI']*100:.1f}% "
+                          f"({result['prediction']})")
+            
+            # Generate report button
+            st.markdown("---")
             col1, col2, col3 = st.columns([1, 1, 1])
             with col2:
-                if st.button("📥 Generate PDF Report", type="primary"):
-                    with st.spinner("Generating report..."):
-                        from report_generator import PDFReportGenerator
+                if st.button("📥 Generate Comparison Report", type="primary"):
+                    with st.spinner("Generating comprehensive report..."):
+                        from report_generator_multi import MultiDrugReportGenerator
                         
-                        generator = PDFReportGenerator()
-                        pdf_path = generator.generate_report(results, st.session_state.uploaded_files)
+                        generator = MultiDrugReportGenerator()
+                        pdf_path = generator.generate_comparison_report(
+                            results, 
+                            st.session_state.multi_uploaded_files
+                        )
                         
-                        # Read the PDF file
                         with open(pdf_path, 'rb') as pdf_file:
                             pdf_bytes = pdf_file.read()
                         
-                        # Create download button
                         st.download_button(
                             label="📄 Download PDF Report",
                             data=pdf_bytes,
-                            file_name=f"DILITracer_Report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                            file_name=f"Multi_Drug_Comparison_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
                             mime="application/pdf"
                         )
                         
                         st.success("✅ Report generated successfully!")
-        
         else:
-            # Empty state
             st.markdown("""
             <div style='text-align: center; padding: 4rem;'>
                 <h2 style='color: #9CA3AF;'>No Analysis Results Yet</h2>

@@ -77,3 +77,10 @@ git push
 git add .
 git commit -m "changed footer"
 git push
+git add .
+git commit -m "css"
+git push
+touch report_generator_multi.py
+streamlit run app.py
+source venv/Scripts/activate
+streamlit run app.py
