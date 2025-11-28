@@ -400,7 +400,7 @@ with workflow_tab1:
 
 with workflow_tab2:
     st.markdown("## 🔬 Organoid Morphology Analysis")
-    st.info("Compare organoid sizes between Control and Experimental conditions using AI-powered segmentation")
+    st.info("Count and measure organoids with AI-powered segmentation. Compare Control vs Experimental conditions.")
     
     # Import analyzer
     from morphology_analyzer import MorphologyAnalyzer
@@ -412,41 +412,10 @@ with workflow_tab2:
         st.session_state.morphology_results = None
     
     # Create tabs
-    upload_tab, analysis_tab, results_tab = st.tabs(["📤 Upload Images", "🔬 Analysis", "📊 Results"])
+    upload_tab, results_tab = st.tabs(["📤 Upload & Analyze", "📊 Results"])
     
     with upload_tab:
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### 🔵 Control Group")
-            control_files = st.file_uploader(
-                "Upload Control Images",
-                type=['tiff', 'tif', 'png', 'jpg'],
-                accept_multiple_files=True,
-                key="control_upload"
-            )
-            if control_files:
-                st.success(f"✅ {len(control_files)} control images uploaded")
-                if st.checkbox("Preview Control", key="preview_control"):
-                    img = Image.open(control_files[0])
-                    st.image(img, caption=control_files[0].name, use_column_width=True)
-        
-        with col2:
-            st.markdown("### 🔴 Experimental Group")
-            experimental_files = st.file_uploader(
-                "Upload Experimental Images",
-                type=['tiff', 'tif', 'png', 'jpg'],
-                accept_multiple_files=True,
-                key="experimental_upload"
-            )
-            if experimental_files:
-                st.success(f"✅ {len(experimental_files)} experimental images uploaded")
-                if st.checkbox("Preview Experimental", key="preview_exp"):
-                    img = Image.open(experimental_files[0])
-                    st.image(img, caption=experimental_files[0].name, use_column_width=True)
-        
-        # Settings
-        st.markdown("---")
+        # Settings at the top
         st.markdown("### ⚙️ Analysis Settings")
         
         col1, col2, col3 = st.columns(3)
@@ -461,227 +430,489 @@ with workflow_tab2:
             )
         
         with col2:
-            min_diameter = st.slider(
-                "Minimum diameter filter (μm)",
-                min_value=0,
-                max_value=500,
-                value=50,
-                step=10,
-                help="Only count organoids larger than this diameter"
+            min_size = st.slider(
+                "Minimum object size (pixels)",
+                min_value=100,
+                max_value=2000,
+                value=300,
+                step=50,
+                help="Filter out objects smaller than this (removes debris)"
             )
         
         with col3:
-            st.metric("Total Images", len(control_files or []) + len(experimental_files or []))
-    
-    with analysis_tab:
-        if control_files and experimental_files:
-            if st.button("🚀 Run Morphology Analysis", type="primary"):
-                with st.spinner("Initializing Cellpose model..."):
+            min_diameter = st.slider(
+                "Minimum diameter filter (μm)",
+                min_value=0,
+                max_value=200,
+                value=0,
+                step=10,
+                help="Only report organoids larger than this diameter"
+            )
+
+        # Advanced settings (expandable)
+        with st.expander("🔧 Advanced Segmentation Settings"):
+            st.info("Adjust these if detection is missing organoids or detecting too many false positives")
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                diameter_mode = st.radio(
+                    "Diameter estimation",
+                    ["Auto-detect", "Manual"],
+                    help="Auto-detect works for most images. Use Manual if detection is poor."
+                )
+                
+                if diameter_mode == "Manual":
+                    manual_diameter = st.number_input(
+                        "Expected diameter (pixels)",
+                        min_value=20,
+                        max_value=500,
+                        value=100,
+                        step=10,
+                        help="Typical organoid diameter in your images"
+                    )
+                else:
+                    manual_diameter = None
+            
+            with col2:
+                flow_threshold = st.slider(
+                    "Flow threshold",
+                    min_value=0.1,
+                    max_value=0.5,
+                    value=0.2,
+                    step=0.05,
+                    help="Lower = detect more objects (may include noise)"
+                )
+            
+            with col3:
+                cellprob_threshold = st.slider(
+                    "Cell probability threshold",
+                    min_value=-6,
+                    max_value=2,
+                    value=-4,
+                    step=1,
+                    help="Lower = detect fainter organoids"
+                )
+        
+        st.markdown("---")
+        
+        # Upload section
+        st.markdown("### 📁 Upload Images")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 🔵 Control Group")
+            control_files = st.file_uploader(
+                "Upload Control Images",
+                type=['tiff', 'tif', 'png', 'jpg', 'jpeg'],
+                accept_multiple_files=True,
+                key="control_upload",
+                help="Upload one or more organoid images for the control condition"
+            )
+            if control_files:
+                st.success(f"✅ {len(control_files)} image(s) uploaded")
+                # Preview first image
+                with st.expander("Preview Control Image"):
+                    img = Image.open(control_files[0])
+                    st.image(img, caption=f"{control_files[0].name} (Original)", use_column_width=True)
+        
+        with col2:
+            st.markdown("#### 🔴 Experimental Group")
+            experimental_files = st.file_uploader(
+                "Upload Experimental Images",
+                type=['tiff', 'tif', 'png', 'jpg', 'jpeg'],
+                accept_multiple_files=True,
+                key="experimental_upload",
+                help="Upload one or more organoid images for the experimental condition"
+            )
+            if experimental_files:
+                st.success(f"✅ {len(experimental_files)} image(s) uploaded")
+                # Preview first image
+                with st.expander("Preview Experimental Image"):
+                    img = Image.open(experimental_files[0])
+                    st.image(img, caption=f"{experimental_files[0].name} (Original)", use_column_width=True)
+        
+        st.markdown("---")
+        
+        # Run Analysis
+        if control_files or experimental_files:
+            total_images = len(control_files or []) + len(experimental_files or [])
+            st.info(f"📊 Ready to analyze {total_images} image(s)")
+            
+            if st.button("🚀 Run Morphology Analysis", type="primary", use_container_width=True):
+                
+                # Initialize analyzer
+                with st.spinner("Initializing segmentation model..."):
                     if st.session_state.morphology_analyzer is None:
                         st.session_state.morphology_analyzer = MorphologyAnalyzer()
                     
                     analyzer = st.session_state.morphology_analyzer
                     analyzer.pixel_to_um = pixel_to_um
-                
-                # Process control images
-                control_measurements = []
-                control_overlays = []
-                
+                    analyzer.set_parameters(
+                        diameter=manual_diameter if 'manual_diameter' in dir() else None,
+                        flow_threshold=flow_threshold if 'flow_threshold' in dir() else 0.2,
+                        cellprob_threshold=cellprob_threshold if 'cellprob_threshold' in dir() else -4,
+                        min_size=min_size
+                    )
+                # Progress tracking
                 progress_bar = st.progress(0)
                 status_text = st.empty()
                 
-                for idx, file in enumerate(control_files):
-                    status_text.text(f"Processing control image {idx+1}/{len(control_files)}")
-                    
-                    with st.spinner(f"Segmenting {file.name}..."):
-                        masks, img = analyzer.segment_organoids(file)
-                        df = analyzer.measure_organoids(masks, min_diameter)
-                        control_measurements.append(df)
-                        
-                        overlay = analyzer.create_overlay(img, masks, df)
-                        control_overlays.append(overlay)
-                    
-                    progress_bar.progress((idx + 1) / (len(control_files) + len(experimental_files)))
+                total_steps = len(control_files or []) + len(experimental_files or [])
+                current_step = 0
                 
-                # Process experimental images
+                # Process Control images
+                control_measurements = []
+                control_overlays = []
+                control_boundary_overlays = []
+                
+                if control_files:
+                    for idx, file in enumerate(control_files):
+                        status_text.text(f"🔵 Processing Control image {idx+1}/{len(control_files)}: {file.name}")
+                        
+                        try:
+                            # Reset file pointer
+                            file.seek(0)
+                            
+                            # Segment
+                            masks, img = analyzer.segment_organoids(file, min_size=min_size)
+                            
+                            # Measure
+                            df = analyzer.measure_organoids(masks, min_diameter_um=min_diameter)
+                            df['source_image'] = file.name
+                            control_measurements.append(df)
+                            
+                            # Create overlays
+                            overlay = analyzer.create_overlay(img, masks, df)
+                            control_overlays.append({
+                                'name': file.name,
+                                'image': overlay,
+                                'count': len(df)
+                            })
+                            
+                            boundary = analyzer.create_boundary_overlay(img, masks, df)
+                            control_boundary_overlays.append({
+                                'name': file.name,
+                                'image': boundary,
+                                'count': len(df)
+                            })
+                            
+                        except Exception as e:
+                            st.error(f"Error processing {file.name}: {str(e)}")
+                            continue
+                        
+                        current_step += 1
+                        progress_bar.progress(current_step / total_steps)
+                
+                # Process Experimental images
                 exp_measurements = []
                 exp_overlays = []
+                exp_boundary_overlays = []
                 
-                for idx, file in enumerate(experimental_files):
-                    status_text.text(f"Processing experimental image {idx+1}/{len(experimental_files)}")
-                    
-                    with st.spinner(f"Segmenting {file.name}..."):
-                        masks, img = analyzer.segment_organoids(file)
-                        df = analyzer.measure_organoids(masks, min_diameter)
-                        exp_measurements.append(df)
+                if experimental_files:
+                    for idx, file in enumerate(experimental_files):
+                        status_text.text(f"🔴 Processing Experimental image {idx+1}/{len(experimental_files)}: {file.name}")
                         
-                        overlay = analyzer.create_overlay(img, masks, df)
-                        exp_overlays.append(overlay)
-                    
-                    progress_bar.progress((len(control_files) + idx + 1) / (len(control_files) + len(experimental_files)))
+                        try:
+                            file.seek(0)
+                            
+                            masks, img = analyzer.segment_organoids(file, min_size=min_size)
+                            df = analyzer.measure_organoids(masks, min_diameter_um=min_diameter)
+                            df['source_image'] = file.name
+                            exp_measurements.append(df)
+                            
+                            overlay = analyzer.create_overlay(img, masks, df)
+                            exp_overlays.append({
+                                'name': file.name,
+                                'image': overlay,
+                                'count': len(df)
+                            })
+                            
+                            boundary = analyzer.create_boundary_overlay(img, masks, df)
+                            exp_boundary_overlays.append({
+                                'name': file.name,
+                                'image': boundary,
+                                'count': len(df)
+                            })
+                            
+                        except Exception as e:
+                            st.error(f"Error processing {file.name}: {str(e)}")
+                            continue
+                        
+                        current_step += 1
+                        progress_bar.progress(current_step / total_steps)
                 
                 # Combine measurements
                 control_df = pd.concat(control_measurements, ignore_index=True) if control_measurements else pd.DataFrame()
                 exp_df = pd.concat(exp_measurements, ignore_index=True) if exp_measurements else pd.DataFrame()
                 
-                # Perform comparison
-                status_text.text("Performing statistical analysis...")
-                results = analyzer.compare_conditions(control_df, exp_df)
+                # Statistical comparison
+                status_text.text("📊 Performing statistical analysis...")
+                stats_results = analyzer.compare_conditions(control_df, exp_df)
                 
                 # Store results
                 st.session_state.morphology_results = {
                     'control_df': control_df,
                     'exp_df': exp_df,
-                    'statistics': results,
+                    'statistics': stats_results,
                     'control_overlays': control_overlays,
                     'exp_overlays': exp_overlays,
-                    'min_diameter': min_diameter
+                    'control_boundary_overlays': control_boundary_overlays,
+                    'exp_boundary_overlays': exp_boundary_overlays,
+                    'settings': {
+                        'pixel_to_um': pixel_to_um,
+                        'min_size': min_size,
+                        'min_diameter': min_diameter
+                    }
                 }
                 
                 progress_bar.progress(1.0)
                 status_text.text("✅ Analysis complete!")
-                st.success("Analysis completed successfully! Check the Results tab.")
-                st.balloons()
+                
+                # Show summary
+                st.success(f"""
+                **Analysis Complete!**
+                - Control: {len(control_df)} organoids detected
+                - Experimental: {len(exp_df)} organoids detected
+                
+                Go to the **Results** tab to view detailed results and visualizations.
+                """)
         else:
-            st.warning("Please upload both control and experimental images first")
+            st.warning("Please upload at least one image to analyze")
     
     with results_tab:
         if st.session_state.morphology_results:
             results = st.session_state.morphology_results
             stats = results['statistics']
             
-            # Summary metrics
-            st.markdown("### 📊 Summary Statistics")
+            # ===== SUMMARY SECTION =====
+            st.markdown("## 📊 Analysis Summary")
             
             col1, col2, col3 = st.columns(3)
             
             with col1:
-                st.markdown("#### 🔵 Control Group")
+                st.markdown("### 🔵 Control")
                 st.metric("Organoid Count", stats['control_stats']['count'])
-                st.metric("Mean Diameter (μm)", f"{stats['control_stats']['mean_diameter_um']:.1f}")
-                st.metric("Std Dev (μm)", f"{stats['control_stats']['std_diameter_um']:.1f}")
+                if stats['control_stats']['count'] > 0:
+                    st.metric("Mean Diameter", f"{stats['control_stats']['mean_diameter_um']:.1f} μm")
+                    st.metric("Std Dev", f"{stats['control_stats']['std_diameter_um']:.1f} μm")
             
             with col2:
-                st.markdown("#### 🔴 Experimental Group")
+                st.markdown("### 🔴 Experimental")
                 st.metric("Organoid Count", stats['experimental_stats']['count'])
-                st.metric("Mean Diameter (μm)", f"{stats['experimental_stats']['mean_diameter_um']:.1f}")
-                st.metric("Std Dev (μm)", f"{stats['experimental_stats']['std_diameter_um']:.1f}")
+                if stats['experimental_stats']['count'] > 0:
+                    st.metric("Mean Diameter", f"{stats['experimental_stats']['mean_diameter_um']:.1f} μm")
+                    st.metric("Std Dev", f"{stats['experimental_stats']['std_diameter_um']:.1f} μm")
             
             with col3:
-                st.markdown("#### 📈 Statistical Test")
+                st.markdown("### 📈 Statistics")
                 if stats['ttest']['p_value'] is not None:
                     st.metric("T-statistic", f"{stats['ttest']['t_statistic']:.3f}")
                     st.metric("P-value", f"{stats['ttest']['p_value']:.4f}")
                     if stats['ttest']['significant']:
-                        st.success("✅ Statistically Significant (p < 0.05)")
+                        st.success("✅ Significant (p < 0.05)")
                     else:
-                        st.info("❌ Not Significant (p ≥ 0.05)")
+                        st.info("Not Significant (p ≥ 0.05)")
                 else:
                     st.warning("Insufficient data for t-test")
             
-            # Visualizations
             st.markdown("---")
-            st.markdown("### 📊 Data Visualizations")
             
-            # Size distribution comparison
-            fig_dist = go.Figure()
+            # ===== SEGMENTATION VISUALIZATION =====
+            st.markdown("## 🔬 Segmentation Results")
+            st.info("View how organoids were detected and counted. Each colored boundary = one organoid.")
             
-            if len(results['control_df']) > 0:
-                fig_dist.add_trace(go.Histogram(
-                    x=results['control_df']['diameter_um'],
-                    name='Control',
-                    opacity=0.7,
-                    marker_color='blue',
-                    nbinsx=20
-                ))
-            
-            if len(results['exp_df']) > 0:
-                fig_dist.add_trace(go.Histogram(
-                    x=results['exp_df']['diameter_um'],
-                    name='Experimental',
-                    opacity=0.7,
-                    marker_color='red',
-                    nbinsx=20
-                ))
-            
-            fig_dist.update_layout(
-                title="Organoid Size Distribution",
-                xaxis_title="Diameter (μm)",
-                yaxis_title="Count",
-                barmode='overlay',
-                height=400
+            # Visualization type selector
+            viz_type = st.radio(
+                "Visualization Style:",
+                ["Boundaries Only (Clean)", "Full Overlay (with labels)"],
+                horizontal=True
             )
-            
-            st.plotly_chart(fig_dist, use_container_width=True)
-            
-            # Box plot comparison
-            box_data = []
-            if len(results['control_df']) > 0:
-                for d in results['control_df']['diameter_um']:
-                    box_data.append({'Group': 'Control', 'Diameter (μm)': d})
-            if len(results['exp_df']) > 0:
-                for d in results['exp_df']['diameter_um']:
-                    box_data.append({'Group': 'Experimental', 'Diameter (μm)': d})
-            
-            if box_data:
-                fig_box = px.box(
-                    pd.DataFrame(box_data),
-                    x='Group',
-                    y='Diameter (μm)',
-                    color='Group',
-                    color_discrete_map={'Control': 'blue', 'Experimental': 'red'},
-                    title="Organoid Size Comparison"
-                )
-                fig_box.update_layout(height=400)
-                st.plotly_chart(fig_box, use_container_width=True)
-            
-            # Segmentation results
-            st.markdown("---")
-            st.markdown("### 🔬 Segmentation Results")
             
             col1, col2 = st.columns(2)
             
             with col1:
+                st.markdown("### 🔵 Control Segmentation")
                 if results['control_overlays']:
-                    st.markdown("#### Control Segmentation")
-                    selected_control = st.selectbox(
-                        "Select control image",
-                        range(len(results['control_overlays'])),
-                        format_func=lambda x: f"Image {x+1}"
-                    )
-                    st.image(results['control_overlays'][selected_control], 
-                            caption=f"Control Image {selected_control+1} - Segmented",
-                            use_column_width=True)
+                    overlays = results['control_boundary_overlays'] if "Boundaries" in viz_type else results['control_overlays']
+                    
+                    for item in overlays:
+                        st.image(
+                            item['image'],
+                            caption=f"{item['name']} - {item['count']} organoids detected",
+                            use_column_width=True
+                        )
+                else:
+                    st.info("No control images analyzed")
             
             with col2:
+                st.markdown("### 🔴 Experimental Segmentation")
                 if results['exp_overlays']:
-                    st.markdown("#### Experimental Segmentation")
-                    selected_exp = st.selectbox(
-                        "Select experimental image",
-                        range(len(results['exp_overlays'])),
-                        format_func=lambda x: f"Image {x+1}"
-                    )
-                    st.image(results['exp_overlays'][selected_exp],
-                            caption=f"Experimental Image {selected_exp+1} - Segmented",
-                            use_column_width=True)
+                    overlays = results['exp_boundary_overlays'] if "Boundaries" in viz_type else results['exp_overlays']
+                    
+                    for item in overlays:
+                        st.image(
+                            item['image'],
+                            caption=f"{item['name']} - {item['count']} organoids detected",
+                            use_column_width=True
+                        )
+                else:
+                    st.info("No experimental images analyzed")
             
-            # Download results
             st.markdown("---")
-            if st.button("📥 Download Results as CSV"):
-                # Combine data with labels
-                control_export = results['control_df'].copy()
-                control_export['Group'] = 'Control'
-                exp_export = results['exp_df'].copy()
-                exp_export['Group'] = 'Experimental'
+            
+            # ===== DATA VISUALIZATIONS =====
+            st.markdown("## 📊 Data Visualizations")
+            
+            # Only show if we have data
+            has_control = len(results['control_df']) > 0
+            has_exp = len(results['exp_df']) > 0
+            
+            if has_control or has_exp:
+                # Histogram
+                st.markdown("### Size Distribution")
+                fig_hist = go.Figure()
                 
-                combined_df = pd.concat([control_export, exp_export], ignore_index=True)
+                if has_control:
+                    fig_hist.add_trace(go.Histogram(
+                        x=results['control_df']['diameter_um'],
+                        name='Control',
+                        opacity=0.7,
+                        marker_color='#3B82F6',
+                        nbinsx=15
+                    ))
                 
-                csv = combined_df.to_csv(index=False)
-                st.download_button(
-                    label="Download CSV",
-                    data=csv,
-                    file_name=f"morphology_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                    mime="text/csv"
+                if has_exp:
+                    fig_hist.add_trace(go.Histogram(
+                        x=results['exp_df']['diameter_um'],
+                        name='Experimental',
+                        opacity=0.7,
+                        marker_color='#EF4444',
+                        nbinsx=15
+                    ))
+                
+                fig_hist.update_layout(
+                    title="Organoid Diameter Distribution",
+                    xaxis_title="Diameter (μm)",
+                    yaxis_title="Count",
+                    barmode='overlay',
+                    height=400
                 )
+                st.plotly_chart(fig_hist, use_container_width=True)
+                
+                # Box plot
+                if has_control and has_exp:
+                    st.markdown("### Diameter Comparison")
+                    
+                    box_data = []
+                    for d in results['control_df']['diameter_um']:
+                        box_data.append({'Group': 'Control', 'Diameter (μm)': d})
+                    for d in results['exp_df']['diameter_um']:
+                        box_data.append({'Group': 'Experimental', 'Diameter (μm)': d})
+                    
+                    fig_box = px.box(
+                        pd.DataFrame(box_data),
+                        x='Group',
+                        y='Diameter (μm)',
+                        color='Group',
+                        color_discrete_map={'Control': '#3B82F6', 'Experimental': '#EF4444'},
+                        title="Organoid Size Comparison (Box Plot)"
+                    )
+                    fig_box.update_layout(height=400, showlegend=False)
+                    st.plotly_chart(fig_box, use_container_width=True)
+            
+            st.markdown("---")
+            
+            # ===== DETAILED DATA TABLE =====
+            st.markdown("## 📋 Detailed Measurements")
+            
+            tab1, tab2 = st.tabs(["Control Data", "Experimental Data"])
+            
+            with tab1:
+                if has_control:
+                    display_cols = ['organoid_id', 'diameter_um', 'area_um2', 'circularity', 'source_image']
+                    available_cols = [c for c in display_cols if c in results['control_df'].columns]
+                    st.dataframe(results['control_df'][available_cols], use_container_width=True)
+                else:
+                    st.info("No control data")
+            
+            with tab2:
+                if has_exp:
+                    display_cols = ['organoid_id', 'diameter_um', 'area_um2', 'circularity', 'source_image']
+                    available_cols = [c for c in display_cols if c in results['exp_df'].columns]
+                    st.dataframe(results['exp_df'][available_cols], use_container_width=True)
+                else:
+                    st.info("No experimental data")
+            
+            # ===== DOWNLOAD =====
+            st.markdown("---")
+            st.markdown("## 📥 Export Results")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Prepare combined data
+                export_data = []
+                if has_control:
+                    ctrl = results['control_df'].copy()
+                    ctrl['group'] = 'Control'
+                    export_data.append(ctrl)
+                if has_exp:
+                    exp = results['exp_df'].copy()
+                    exp['group'] = 'Experimental'
+                    export_data.append(exp)
+                
+                if export_data:
+                    combined = pd.concat(export_data, ignore_index=True)
+                    # Remove centroid and bbox (not CSV friendly)
+                    export_cols = [c for c in combined.columns if c not in ['centroid', 'bbox']]
+                    csv = combined[export_cols].to_csv(index=False)
+                    
+                    st.download_button(
+                        label="📄 Download CSV",
+                        data=csv,
+                        file_name=f"morphology_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
+                    )
+            
+            with col2:
+                # Summary report
+                summary_text = f"""
+ORGANOID MORPHOLOGY ANALYSIS REPORT
+Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+SETTINGS:
+- Pixel to μm: {results['settings']['pixel_to_um']}
+- Min object size: {results['settings']['min_size']} px
+- Min diameter filter: {results['settings']['min_diameter']} μm
+
+CONTROL GROUP:
+- Count: {stats['control_stats']['count']}
+- Mean Diameter: {stats['control_stats']['mean_diameter_um']:.2f} μm
+- Std Dev: {stats['control_stats']['std_diameter_um']:.2f} μm
+
+EXPERIMENTAL GROUP:
+- Count: {stats['experimental_stats']['count']}
+- Mean Diameter: {stats['experimental_stats']['mean_diameter_um']:.2f} μm
+- Std Dev: {stats['experimental_stats']['std_diameter_um']:.2f} μm
+
+STATISTICAL TEST (Welch's t-test):
+- T-statistic: {stats['ttest']['t_statistic']}
+- P-value: {stats['ttest']['p_value']}
+- Significant: {'Yes' if stats['ttest']['significant'] else 'No'}
+"""
+                st.download_button(
+                    label="📝 Download Summary",
+                    data=summary_text,
+                    file_name=f"morphology_summary_{datetime.now().strftime('%Y%m%d_%H%M%S')}.txt",
+                    mime="text/plain"
+                )
+        
         else:
-            st.info("No results yet. Please run analysis first.")
+            st.markdown("""
+            <div style='text-align: center; padding: 4rem;'>
+                <h2 style='color: #9CA3AF;'>No Results Yet</h2>
+                <p style='color: #9CA3AF;'>Upload images and run analysis to see results</p>
+            </div>
+            """, unsafe_allow_html=True)

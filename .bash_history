@@ -84,3 +84,19 @@ touch report_generator_multi.py
 streamlit run app.py
 source venv/Scripts/activate
 streamlit run app.py
+git add .
+git commit -m "added 4 drugs analysis"
+git push
+deactivate
+ls
+streamlit run app.py
+source venv/Scripts/activate
+streamlit run app.py
+ls
+python morphology_v3.py lung-organoid-20d.jpg --method classical
+source venv/Scripts/activate
+python morphology_v3.py lung-organoid-20d.jpg --method classical
+python morphology_v3.py lung-organoid-27d.jpg --method classical
+deactivate 
+streamlit run app.py
+git status
