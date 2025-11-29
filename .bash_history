@@ -100,3 +100,15 @@ python morphology_v3.py lung-organoid-27d.jpg --method classical
 deactivate 
 streamlit run app.py
 git status
+git add .
+git commit -m "morphology v3 added"
+git push
+deactivate 
+source venv/Scripts/activate
+clear
+touch growth_tracker.py
+ls
+rm growth_tracker.py 
+streamlit run app.py
+ls
+streamlit run app.py

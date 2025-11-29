@@ -403,7 +403,7 @@ with workflow_tab2:
     st.info("Count and measure organoids with AI-powered segmentation. Compare Control vs Experimental conditions.")
     
     # Import analyzer
-    from morphology_analyzer import MorphologyAnalyzer
+    from morphology_v3 import OrganoidAnalyzer
     
     # Initialize session state
     if 'morphology_analyzer' not in st.session_state:
@@ -412,7 +412,11 @@ with workflow_tab2:
         st.session_state.morphology_results = None
     
     # Create tabs
-    upload_tab, results_tab = st.tabs(["📤 Upload & Analyze", "📊 Results"])
+    upload_tab, results_tab, growth_tab = st.tabs([
+        "📤 Upload & Analyze", 
+        "📊 Results",
+        "📈 Growth Tracking"
+    ])
     
     with upload_tab:
         # Settings at the top
@@ -545,16 +549,11 @@ with workflow_tab2:
                 # Initialize analyzer
                 with st.spinner("Initializing segmentation model..."):
                     if st.session_state.morphology_analyzer is None:
-                        st.session_state.morphology_analyzer = MorphologyAnalyzer()
+                        st.session_state.morphology_analyzer = OrganoidAnalyzer(method='classical')
                     
                     analyzer = st.session_state.morphology_analyzer
                     analyzer.pixel_to_um = pixel_to_um
-                    analyzer.set_parameters(
-                        diameter=manual_diameter if 'manual_diameter' in dir() else None,
-                        flow_threshold=flow_threshold if 'flow_threshold' in dir() else 0.2,
-                        cellprob_threshold=cellprob_threshold if 'cellprob_threshold' in dir() else -4,
-                        min_size=min_size
-                    )
+                    analyzer.params['min_size_pixels'] = min_size
                 # Progress tracking
                 progress_bar = st.progress(0)
                 status_text = st.empty()
@@ -916,3 +915,215 @@ STATISTICAL TEST (Welch's t-test):
                 <p style='color: #9CA3AF;'>Upload images and run analysis to see results</p>
             </div>
             """, unsafe_allow_html=True)
+
+    with growth_tab:
+        st.markdown("## 📈 Organoid Growth Tracking")
+        st.info("Track how organoid diameter changes over multiple days")
+
+        # Use the same analyzer as the main analysis
+        if 'growth_analyzer' not in st.session_state:
+            st.session_state.growth_analyzer = None
+        if 'growth_data' not in st.session_state:
+            st.session_state.growth_data = {}
+
+        # Settings (same as main tab)
+        st.markdown("### ⚙️ Settings")
+        col1, col2 = st.columns(2)
+        with col1:
+            growth_pixel_to_um = st.number_input(
+                "Pixel to μm",
+                min_value=0.1,
+                max_value=10.0,
+                value=0.65,
+                step=0.05,
+                key="growth_pixel"
+            )
+        with col2:
+            growth_min_size = st.slider(
+                "Min object size (pixels)",
+                min_value=100,
+                max_value=2000,
+                value=300,
+                step=50,
+                key="growth_min_size"
+            )
+
+        st.markdown("---")
+        st.markdown("### 📁 Upload Images for Each Day")
+
+        # Simple 4-day upload
+        col1, col2, col3, col4 = st.columns(4)
+
+        day_files = {}
+
+        with col1:
+            st.markdown("**Day 1**")
+            day1_num = st.number_input("Day number", value=0, key="day1_num", min_value=0)
+            day1_file = st.file_uploader("Upload", type=['jpg', 'jpeg', 'png', 'tif', 'tiff'], key="day1_file", label_visibility="collapsed")
+            if day1_file:
+                day_files[day1_num] = {'file': day1_file, 'name': f"Day {day1_num}"}
+                st.success("✅")
+
+        with col2:
+            st.markdown("**Day 2**")
+            day2_num = st.number_input("Day number", value=7, key="day2_num", min_value=0)
+            day2_file = st.file_uploader("Upload", type=['jpg', 'jpeg', 'png', 'tif', 'tiff'], key="day2_file", label_visibility="collapsed")
+            if day2_file:
+                day_files[day2_num] = {'file': day2_file, 'name': f"Day {day2_num}"}
+                st.success("✅")
+
+        with col3:
+            st.markdown("**Day 3 (Optional)**")
+            day3_num = st.number_input("Day number", value=14, key="day3_num", min_value=0)
+            day3_file = st.file_uploader("Upload", type=['jpg', 'jpeg', 'png', 'tif', 'tiff'], key="day3_file", label_visibility="collapsed")
+            if day3_file:
+                day_files[day3_num] = {'file': day3_file, 'name': f"Day {day3_num}"}
+                st.success("✅")
+
+        with col4:
+            st.markdown("**Day 4 (Optional)**")
+            day4_num = st.number_input("Day number", value=21, key="day4_num", min_value=0)
+            day4_file = st.file_uploader("Upload", type=['jpg', 'jpeg', 'png', 'tif', 'tiff'], key="day4_file", label_visibility="collapsed")
+            if day4_file:
+                day_files[day4_num] = {'file': day4_file, 'name': f"Day {day4_num}"}
+                st.success("✅")
+
+        st.markdown("---")
+
+        # Analyze button
+        if len(day_files) >= 2:
+            st.success(f"✅ {len(day_files)} timepoints ready")
+            
+            if st.button("🚀 Analyze Growth", type="primary", use_container_width=True, key="growth_analyze_btn"):
+                
+                # Initialize analyzer (SAME as main tab)
+                with st.spinner("Analyzing..."):
+                    analyzer = OrganoidAnalyzer(method='classical')
+                    analyzer.pixel_to_um = growth_pixel_to_um
+                    analyzer.params['min_size_pixels'] = growth_min_size
+                    
+                    results = {}
+                    
+                    # Sort by day number
+                    sorted_days = sorted(day_files.keys())
+                    
+                    progress = st.progress(0)
+                    
+                    for idx, day_num in enumerate(sorted_days):
+                        data = day_files[day_num]
+                        file = data['file']
+                        
+                        st.text(f"Processing Day {day_num}...")
+                        
+                        # Reset file pointer
+                        file.seek(0)
+                        
+                        # Run SAME segmentation as main tab
+                        masks, img = analyzer.segment_organoids(file, min_size=growth_min_size)
+                        measurements = analyzer.measure_organoids(masks, min_diameter_um=0)
+                        
+                        # Create overlay (SAME as main tab)
+                        overlay = analyzer.create_overlay(img, masks, measurements)
+                        
+                        # Store results
+                        results[day_num] = {
+                            'name': f"Day {day_num}",
+                            'count': len(measurements),
+                            'mean_diameter': measurements['diameter_um'].mean() if len(measurements) > 0 else 0,
+                            'std_diameter': measurements['diameter_um'].std() if len(measurements) > 0 else 0,
+                            'overlay': overlay,
+                            'measurements': measurements
+                        }
+                        
+                        progress.progress((idx + 1) / len(sorted_days))
+                    
+                    # Store in session state
+                    st.session_state.growth_data = results
+                
+                st.success("✅ Analysis complete!")
+
+        elif len(day_files) == 1:
+            st.warning("Please upload at least 2 images to track growth")
+        else:
+            st.info("Upload images for at least 2 different days")
+
+        # Display Results
+        if st.session_state.growth_data:
+            results = st.session_state.growth_data
+            sorted_days = sorted(results.keys())
+            
+            st.markdown("---")
+            st.markdown("## 📊 Results")
+            
+            # Calculate growth
+            first_day = sorted_days[0]
+            last_day = sorted_days[-1]
+            initial_diameter = results[first_day]['mean_diameter']
+            final_diameter = results[last_day]['mean_diameter']
+            
+            if initial_diameter > 0:
+                growth_percent = ((final_diameter - initial_diameter) / initial_diameter) * 100
+            else:
+                growth_percent = 0
+            
+            # Summary metrics
+            st.markdown("### 📈 Growth Summary")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                st.metric(
+                    f"Initial (Day {first_day})",
+                    f"{initial_diameter:.1f} μm"
+                )
+            
+            with col2:
+                st.metric(
+                    f"Final (Day {last_day})",
+                    f"{final_diameter:.1f} μm"
+                )
+            
+            with col3:
+                st.metric(
+                    "Total Growth",
+                    f"{growth_percent:+.1f}%",
+                    delta=f"{final_diameter - initial_diameter:+.1f} μm"
+                )
+            
+            # Data table
+            st.markdown("### 📋 Measurements by Day")
+            
+            table_data = []
+            for day_num in sorted_days:
+                data = results[day_num]
+                table_data.append({
+                    'Day': day_num,
+                    'Organoid Count': data['count'],
+                    'Mean Diameter (μm)': round(data['mean_diameter'], 1),
+                    'Std Dev (μm)': round(data['std_diameter'], 1)
+                })
+            
+            st.dataframe(pd.DataFrame(table_data), use_container_width=True)
+            
+            # Show detected images
+            st.markdown("### 🔬 Detected Images")
+            
+            cols = st.columns(len(sorted_days))
+            
+            for col, day_num in zip(cols, sorted_days):
+                data = results[day_num]
+                with col:
+                    st.image(
+                        data['overlay'],
+                        caption=f"Day {day_num}\n{data['count']} organoids\nØ {data['mean_diameter']:.1f} μm",
+                        use_column_width=True
+                    )
+            
+            # Download
+            st.markdown("---")
+            csv_data = pd.DataFrame(table_data).to_csv(index=False)
+            st.download_button(
+                "📥 Download Results CSV",
+                data=csv_data,
+                file_name=f"growth_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
