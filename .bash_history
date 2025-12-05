@@ -112,3 +112,8 @@ rm growth_tracker.py
 streamlit run app.py
 ls
 streamlit run app.py
+git add .
+git commit -m "added growth analyser"
+git push
+deactivate 
+source venv/Scripts/activate

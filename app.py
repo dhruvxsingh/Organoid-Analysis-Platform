@@ -817,7 +817,12 @@ with workflow_tab2:
                         color='Group',
                         color_discrete_map={'Control': '#3B82F6', 'Experimental': '#EF4444'},
                         title="Organoid Size Comparison (Box Plot)"
+                        points="all"
                     )
+                    fig_box.update_traces(
+                        jitter=0.3,
+                        pointpos=0
+                    ) 
                     fig_box.update_layout(height=400, showlegend=False)
                     st.plotly_chart(fig_box, use_container_width=True)
             
