@@ -816,7 +816,7 @@ with workflow_tab2:
                         y='Diameter (μm)',
                         color='Group',
                         color_discrete_map={'Control': '#3B82F6', 'Experimental': '#EF4444'},
-                        title="Organoid Size Comparison (Box Plot)"
+                        title="Organoid Size Comparison (Box Plot)",
                         points="all"
                     )
                     fig_box.update_traces(

@@ -117,3 +117,8 @@ git commit -m "added growth analyser"
 git push
 deactivate 
 source venv/Scripts/activate
+git add .
+git commit "add datapoints"
+git commit -m "added datapoints"
+git push
+git status
